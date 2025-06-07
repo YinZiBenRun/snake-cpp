@@ -1,808 +1,217 @@
 #include <iostream>
-#include <linux/input.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
+#include <ncurses.h>
 #include <unistd.h>
-#include <cstring>
-#include <cmath>
-#include <list>
-#include <cstdlib>  // ĞÂÔö£ºÓÃÓÚËæ»úÊıÉú³É
-#include <ctime>    // ĞÂÔö£ºÓÃÓÚ³õÊ¼»¯Ëæ»úÊıÖÖ×Ó
-#include <sys/mman.h>
-#include <thread>       // ĞÂÔö£ºC++±ê×¼Ïß³Ì¿â
-#include <atomic>       // ĞÂÔö£ºÔ­×Ó²Ù×÷¿â
+#include <cstdlib>
+#include <ctime>
 using namespace std;
 
+#define H 27 // åœ°å›¾é«˜åº¦
+#define W 60 // åœ°å›¾å®½åº¦
 
-
-
-
-class body//ÉíÌåÀà   --ÍõÎÀÎÈ
-{
-	public:
-		int pos_x;//µ±Ç°ÉíÌåxÎ»ÖÃ×ø±ê
-		int pos_y;//µ±Ç°ÉíÌåyÎ»ÖÃ×ø±ê
-		int height;//¸ß¶È
-		int width;//¿í¶È
-		int color;//ÑÕÉ«
-	
-		body()
-		{
-			this->height=10;
-			this->width=10;
-		}
-	
-		body(int pos_x,int pos_y,int color):pos_x(pos_x),pos_y(pos_y)
-		{
-			this->height=10;
-			this->width=10;
-		}
-		
-		~body()
-		{
-			
-		}
-
+const int dir[4][2] = { // è›‡è¿åŠ¨çš„æ–¹å‘
+	{-1,0}, // ä¸Š
+	{1,0},  // ä¸‹
+	{0,-1}, // å·¦
+	{0,1}   // å³
 };
 
-class food//Ê³ÎïÀà	  --ÕÅï¿
-{
-	public:
-		int pos_x;//µ±Ç°ÉíÌåxÎ»ÖÃ×ø±ê
-		int pos_y;//µ±Ç°ÉíÌåyÎ»ÖÃ×ø±ê
-		int height;//¸ß¶È
-		int width;//¿í¶È
-		int color;//ÑÕÉ«
-	
-		food(int color):color(color)
-		{
-			this->height=10;
-			this->width=10;
-		}
-	
-	
-		food(int pos_x,int pos_y,int color):pos_x(pos_x),pos_y(pos_y),color(color)
-		{
-			this->height=10;
-			this->width=10;
-		}
-		
-		~food()
-		{
-			
-		}
-		
-		
-		
-	// Ëæ»úÉú³ÉĞÂÎ»ÖÃ£¨Ğè´«ÈëÆÁÄ»¿í¸ß£©
-    void random_position(int screen_width, int screen_height) 
-	{
-		pos_x = (rand() % ((screen_width - width) / 20)) * 20;  // Ô¤Áô¿í¶È
-		pos_y = (rand() % ((screen_height - height) / 20)) * 20; // Ô¤Áô¸ß¶È
-    }
-	
-	
-	
+enum BlockType {
+	EMPTY = 0, // æ²¡æœ‰é£Ÿç‰©ï¼Œç©ºçŠ¶æ€ä¸º0
+	FOOD = 1,  // æœ‰é£Ÿç‰©çŠ¶æ€ä¸º1
 };
 
-class snake//ÉßÀà   	--³ÂÃ¯ºã
-{
-	public:
-		int body_cnt;//ÉíÌå½ÚÊı
-		list<body> bodys;//ListÈİÆ÷ÓÃÀ´±£´æÉßµÄÃ¿Ò»½ÚÉíÌå
-		int orientation;//ÉßÃæÏòµÄ·½Ïò 0ÉÏ 1ÏÂ 2×ó 3ÓÒ
-		int speed;
-	
-	//³õÊ¼Ö»ÓĞ3¸öÉíÌå
-	snake()
-	{
-		body_cnt = 3;
-		speed = 10;
-		int centerX = (800 >> 2); // 800 / 4 = 200
-		int centerY = (480 >> 2); // 480 / 4 = 120
-		
-		// ³õÊ¼·½ÏòÏòÓÒ£¬´´½¨3¸öÉíÌå½Úµã£¨ºáÏòÅÅÁĞ£©
-		for(int i = 0; i < 3; i++) {
-			body b;
-			b.pos_x = centerX - (i * b.width); // Ã¿¸ö½Úµã¿í¶ÈÎª4
-			b.pos_y = centerY;
-			b.color = 0x00FF0000; // ºìÉ«
-			bodys.push_back(b);
-		}
-		
-		// ³õÊ¼·½ÏòÏòÓÒ
-		this->orientation = 3;
-		
-	}
-	
-	~snake()
-	{
-		
-	}
-	
-	/*
-		ÏòÉÏÔË¶¯ 
-	*/
-	void move_up()
-	{
-		//ÅĞ¶Ï³¯ÏòÊÇ·ñÓëÔË¶¯·½Ïò³åÍ»
-		if(this->orientation == 1) // Èç¹û´ËÊ±·½Ïò³¯ÏÂ¾Í»á³åÍ»
-		{
-			cout<<"µ±Ç°ÔË¶¯·½Ïò³¯ÏÂ²»ÄÜ³¯·´·½ÏòÔË¶¯"<<endl;
-			return;
-		}
-		
-		// ¸üĞÂÉßµÄ³¯Ïò
-		this->orientation = 0;
-		
-		// ±£´æÉßÍ·µ±Ç°Î»ÖÃ
-		int oldHeadX = bodys.front().pos_x;
-		int oldHeadY = bodys.front().pos_y;
-		
-		// ¸üĞÂÉßÍ·Î»ÖÃ
-		bodys.front().pos_y -= speed;
-		
-		// ¸üĞÂÉßÉíÎ»ÖÃ
-		int prevX, prevY, tempX, tempY;
-		prevX = oldHeadX;
-		prevY = oldHeadY;
-		
-		for (auto it = ++bodys.begin(); it != bodys.end(); ++it) 
-		{
-			tempX = it->pos_x;
-			tempY = it->pos_y;
-			it->pos_x = prevX;
-			it->pos_y = prevY;
-			prevX = tempX;
-			prevY = tempY;
-		}
-	}
-	
-	
-	/*
-		ÏòÏÂÔË¶¯ 
-	*/
-	void move_down()
-	{
-		if(this->orientation == 0) // Èç¹û´ËÊ±·½Ïò³¯ÉÏ¾Í»á³åÍ»
-		{
-			cout<<"µ±Ç°ÔË¶¯·½Ïò³¯ÉÏ²»ÄÜ³¯·´·½ÏòÔË¶¯"<<endl;
-			return;
-		}
-		
-		this->orientation = 1;
-		
-		int oldHeadX = bodys.front().pos_x;
-		int oldHeadY = bodys.front().pos_y;
-		
-		bodys.front().pos_y += speed;
-		
-		int prevX, prevY, tempX, tempY;
-		prevX = oldHeadX;
-		prevY = oldHeadY;
-		
-		for (auto it = ++bodys.begin(); it != bodys.end(); ++it) {
-			tempX = it->pos_x;
-			tempY = it->pos_y;
-			it->pos_x = prevX;
-			it->pos_y = prevY;
-			prevX = tempX;
-			prevY = tempY;
-		}
-	}
-	
-	/*
-		Ïò×óÔË¶¯ 
-	*/
-	void move_left()
-	{
-		if(this->orientation == 3) // Èç¹û´ËÊ±·½Ïò³¯ÓÒ¾Í»á³åÍ»
-		{
-			cout<<"µ±Ç°ÔË¶¯·½Ïò³¯ÓÒ²»ÄÜ³¯·´·½ÏòÔË¶¯"<<endl;
-			return;
-		}
-		
-		this->orientation = 2;
-		
-		int oldHeadX = bodys.front().pos_x;
-		int oldHeadY = bodys.front().pos_y;
-		
-		bodys.front().pos_x -= speed;
-		
-		int prevX, prevY, tempX, tempY;
-		prevX = oldHeadX;
-		prevY = oldHeadY;
-		
-		for (auto it = ++bodys.begin(); it != bodys.end(); ++it) {
-			tempX = it->pos_x;
-			tempY = it->pos_y;
-			it->pos_x = prevX;
-			it->pos_y = prevY;
-			prevX = tempX;
-			prevY = tempY;
-		}
-	}
-	/*
-		ÏòÓÒÔË¶¯ 
-	*/
-	void move_right()
-	{
-		if(this->orientation == 2) // Èç¹û´ËÊ±·½Ïò³¯×ó¾Í»á³åÍ»
-		{
-			cout<<"µ±Ç°ÔË¶¯·½Ïò³¯×ó²»ÄÜ³¯·´·½ÏòÔË¶¯"<<endl;
-			return;
-		}
-		
-		this->orientation = 3;
-		
-		int oldHeadX = bodys.front().pos_x;
-		int oldHeadY = bodys.front().pos_y;
-		
-		bodys.front().pos_x += speed;
-		
-		int prevX, prevY, tempX, tempY;
-		prevX = oldHeadX;
-		prevY = oldHeadY;
-		
-		for (auto it = ++bodys.begin(); it != bodys.end(); ++it) {
-			tempX = it->pos_x;
-			tempY = it->pos_y;
-			it->pos_x = prevX;
-			it->pos_y = prevY;
-			prevX = tempX;
-			prevY = tempY;
-		}
-	}
-	
-	
-	// ĞÂÔö£º×Ô¶¯ÒÆ¶¯·½·¨£¨Ìæ´úÊÖ¶¯ÒÆ¶¯£©
-    void auto_move() {
-        int oldHeadX = bodys.front().pos_x;
-        int oldHeadY = bodys.front().pos_y;
-
-        // ¸ù¾İµ±Ç°·½Ïò¸üĞÂÉßÍ·Î»ÖÃ
-        switch (orientation) {
-            case 0: // ÉÏ
-                bodys.front().pos_y -= speed;
-                break;
-            case 1: // ÏÂ
-                bodys.front().pos_y += speed;
-                break;
-            case 2: // ×ó
-                bodys.front().pos_x -= speed;
-                break;
-            case 3: // ÓÒ
-                bodys.front().pos_x += speed;
-                break;
-            default:
-                return; // ³õÊ¼·½ÏòÎªÓÒ£¬ÎŞĞè´¦Àí
-        }
-
-        // ¸üĞÂÉßÉíÎ»ÖÃ£¨ÓëÔ­ÓĞÂß¼­Ò»ÖÂ£©
-        int prevX = oldHeadX, prevY = oldHeadY;
-        for (auto it = ++bodys.begin(); it != bodys.end(); ++it) {
-            swap(it->pos_x, prevX);
-            swap(it->pos_y, prevY);
-        }
-    }
-	
-	
-	/*
-		ÅĞ¶ÏÊÇ·ñ³Ôµ½Ê³Îï	
-
-		ÊÇ ·µ»Øtrue
-		·ñ ·µ»Øfalse
-	*/
-	bool check_eat_food(const food& f)
-	{
-		// ÉßÍ·×ø±êÓëÊ³Îï×ø±êÖØºÏ£¨¿¼ÂÇÎïÌå´óĞ¡£©
-		body head = bodys.front();
-		 // ¿¼ÂÇÉíÌå´óĞ¡£¨ÉßÍ·¾ØĞÎÓëÊ³Îï¾ØĞÎÖØµş£©
-        return (head.pos_x < f.pos_x + f.width &&
-                head.pos_x + head.width > f.pos_x &&
-                head.pos_y < f.pos_y + f.height &&
-                head.pos_y + head.height > f.pos_y);
-	}
-	
-	
-	
-	
-	/*
-		ÅĞ¶ÏÊÇ·ñÓÎÏ·½áÊø	
-		ÅĞ¶ÏÓÎÏ·ÊÇ·ñ½áÊø£¨×²Ç½»ò×²×ÔÉí£©
-		ÊÇ ·µ»Øtrue
-		·ñ ·µ»Øfalse
-	*/
-	bool game_over()
-	{
-		
-		/**
-		 body head = bodys.front();//ÉßÍ·
-		 
-		// ±ß½ç¼ì²â£¨ÉßÍ·³¬³öÆÁÄ»·¶Î§£©
-        if (head.pos_x < 0 || 
-			head.pos_x + head.width >= 800 || // ¿¼ÂÇ¿í¶È
-			head.pos_y < 0 || 
-			head.pos_y + head.height >= 480) // ¿¼ÂÇ¸ß¶È
-		{
-            return true;
-        }
-		
-		 // ×ÔÅö×²¼ì²â£¨ÉßÍ·ÓëÉíÌå½ÚµãÖØºÏ£©
-		 
-		for (auto it = ++bodys.begin(); it != bodys.end(); ++it) 
-		{
-            if (head.pos_x == it->pos_x && head.pos_y == it->pos_y) 
-			{
-                return true;
-            }
-        }
-		 
-		return false;
-		*/
-		
-		 body head = bodys.front();
-		// Ç½±Ú±ß½ç£º×ó10£¬ÓÒ790£¨800-10£©£¬ÉÏ10£¬ÏÂ470£¨480-10£©
-		if (head.pos_x < 10 || 
-			head.pos_x + head.width > 790 || // ÓÒ±ß½ç
-			head.pos_y < 10 || 
-			head.pos_y + head.height > 470) { // ÏÂ±ß½ç
-			return true;
-		}
-		// ×ÔÅö×²¼ì²â
-		for (auto it = ++bodys.begin(); it != bodys.end(); ++it) {
-			if (head.pos_x == it->pos_x && head.pos_y == it->pos_y) {
-				return true;
-			}
-		}
-		return false;
-		
-	}
-	
-	
-	 /* ÉßÉíÔö³¤£¨³ÔÊ³Îïºóµ÷ÓÃ£© */
-    void grow() 
-	{
-        body last = bodys.back();
-        // Ö±½ÓÔÚÎ²²¿Ìí¼ÓÒ»¸öÓëÔ­Î²²¿Î»ÖÃÏàÍ¬µÄ½Úµã
-		bodys.push_back(body(last.pos_x, last.pos_y, last.color));
-		body_cnt++;
-    }
-	
-	
-	
-	
+struct Map {
+	BlockType data[H][W]; // åœ°å›¾æ¯ä¸ªæ ¼å­
+	bool hasFood;         // åˆ¤æ–­åœ°å›¾é‡Œæœ‰æ²¡æœ‰é£Ÿç‰©
 };
 
-
-class Lcd //ÆÁÄ»Àà --Òü¼ÑÎ¢
-{
-	public:
-		int fd;//ÎÄ¼şÃèÊö·û                
-		int * addr_mapper;//Ó³ÉäÊ×µØÖ·              
-		int width;//¿í¶È  
-		int height;//¸ß¶È
-	
-	Lcd(int width,int height):width(width), height(height) 
-	{
-		this->fd = open("/dev/fb0",O_RDWR);
-		
-		if(this->fd==-1)
-		{
-			cout<<"´ò¿ª "<<"/dev/fb0"<<"Ê§°Ü"<<endl;
-		}
-		
-		this->addr_mapper =(int*)mmap(NULL,height*width*4,PROT_READ|PROT_WRITE,MAP_SHARED,this->fd,0);
-		
-		if(this->addr_mapper==MAP_FAILED)
-		{
-			cout<<"Ó³ÉäÊ§°Ü"<<endl;
-			
-		}
-	}
-	
-	
-	
-	~Lcd()
-	{
-		//½â³ıÓ³Éä
-		int munmap_result = munmap(this->addr_mapper,height*width*4);
-		if(munmap_result==-1)
-		{
-			cout<<"½âÓ³ÉäÊ§°Ü"<<endl;
-			
-		}
-		else
-		{
-			cout<<"½âÓ³Éä³É¹¦"<<endl;
-		}
-		
-		//¹Ø±ÕÖ¡»º³åÎÄ¼ş
-		
-		int close_result = close(this->fd);
-		
-		if(close_result ==-1)
-		{
-			cout<<"¹Ø±ÕÎÄ¼ş"<<this->fd<<"Ê§°Ü"<<endl;
-			
-		}
-		else
-		{
-			cout<<"¹Ø±ÕÎÄ¼ş"<<this->fd<<"³É¹¦"<<endl;
-			
-		}
-	}
-	
-	
-	/*
-	ÏÔÊ¾ÏñËØµã
-	
-		x:  x×ø±ê
-		y:  y×ø±ê
-		color : ÑÕÉ«
-	*/
-	
-	void show_pixel(int x,int y,int color)
-	{
-		//Ğ´ÈëÓ³ÉäÎÄ¼ş
-		if(x<this->width && x>=0 && y<this->height && y>=0)
-		{
-			*(this->addr_mapper+y*width+x) = color;
-		}
-		
-	}
-	
-	
-	/*
-	ÇåÆÁ
-	*/
-	void clear_display()
-	{
-		//Ğ´ÈëÓ³ÉäÎÄ¼ş
-		for(int i=0;i<this->width;i++)
-		{
-			for(int j=0;j<this->height;j++)
-			{
-				*(this->addr_mapper+j*width+i)=0xFF000000;
-			}
-		}
-	}
-	
-	
-	// ĞÂÔö£º¾Ö²¿ÇåÆÁ£¨½öÇå³ıÉßºÍÊ³Îï£¬±£ÁôÇ½±Ú£©
-    void clear_objects(snake& snake, food& food) {
-        // Çå³ı¾ÉÊ³ÎïÎ»ÖÃ
-        for (int dx = 0; dx < food.width; dx++) {
-            for (int dy = 0; dy < food.height; dy++) {
-                show_pixel(food.pos_x + dx, food.pos_y + dy, 0xFF000000); // ºÚÉ«±³¾°
-            }
-        }
-        // Çå³ıÉßÎ²¾ÉÎ»ÖÃ£¨ÉßÒÆ¶¯Ê±Î²²¿»á±»ĞÂÎ»ÖÃ¸²¸Ç£©
-        if (!snake.bodys.empty()) {
-            body tail = snake.bodys.back();
-            for (int dx = 0; dx < tail.width; dx++) {
-                for (int dy = 0; dy < tail.height; dy++) {
-                    show_pixel(tail.pos_x + dx, tail.pos_y + dy, 0xFF000000);
-                }
-            }
-        }
-    }
-
-	
-	
-	
-	/*
-	ÏÔÊ¾ÉßµÄÉíÌå
-	*/
-	void show_snake(snake &snake)
-	{
-		for (const auto& b : snake.bodys) 
-		{
-            // »æÖÆ¾ØĞÎ£¨¼òµ¥ÊµÏÖ£ºÃ¿¸öÉíÌå½ÚµãÎª 4x4 ÏñËØ¿é£©
-            for (int dx = 0; dx < b.width; dx++) 
-			{
-                for (int dy = 0; dy < b.height; dy++) 
-				{
-                    show_pixel(b.pos_x + dx, b.pos_y + dy, b.color);
-                }
-            }
-        }
-	}
-	
-	
-	/*
-	ÏÔÊ¾Ê³Îï
-	*/
-	void show_food(food &food)
-	{
-		 // »æÖÆÊ³Îï£¨10x10 ÏñËØ¿é£©
-        for (int dx = 0; dx < food.width; dx++) 
-		{
-            for (int dy = 0; dy < food.height; dy++) 
-			{
-                show_pixel(food.pos_x + dx, food.pos_y + dy, food.color); // ÂÌÉ«
-            }
-        }
-	}
-	
-	// ĞÂÔö£º»æÖÆÇ½±Ú£¨±ß¿ò£©
-    void draw_wall() {
-        const int wall_color = 0xFFFFFFFF; // °×É«
-        const int wall_width = 10; // Ç½±Ú¿í¶ÈÓëÉßÉíÒ»ÖÂ
-
-        // ÉÏ±ß½ç
-        for (int x = 0; x < width; x++) {
-            for (int y = 0; y < wall_width; y++) {
-                show_pixel(x, y, wall_color);
-            }
-        }
-        // ÏÂ±ß½ç
-        for (int x = 0; x < width; x++) {
-            for (int y = height - wall_width; y < height; y++) {
-                show_pixel(x, y, wall_color);
-            }
-        }
-        // ×ó±ß½ç
-        for (int y = 0; y < height; y++) {
-            for (int x = 0; x < wall_width; x++) {
-                show_pixel(x, y, wall_color);
-            }
-        }
-        // ÓÒ±ß½ç
-        for (int y = 0; y < height; y++) {
-            for (int x = width - wall_width; x < width; x++) {
-                show_pixel(x, y, wall_color);
-            }
-        }
-    }
-	
-	
+struct Pos {
+	int x;
+	int y;
 };
 
-
-
-
-
-
-class touch_display//´¥ÃşÆÁÀà   --Òü¼ÑÎ¢
-{
-	public: 
-		
-		int ts_fd;	//´¥ÃşÆÁµÄÎÄ¼şÃèÊö·û
-		int b_x;//xµÄ¿ªÊ¼×ø±ê
-		int b_y;//yµÄ¿ªÊ¼×ø±ê
-		int s_x;//xµÄÍ£Ö¹×ø±ê
-		int s_y;//yµÄÍ£Ö¹×ø±ê
-		
-		touch_display() //¹¹Ôìº¯Êı
-		{
-			
-		}
-		~touch_display() //Îö¹¹º¯Êı
-		{
-			
-		}
-		/*
-		//´ò¿ª´¥ÃşÆÁ
-		³É¹¦·µ»Ø0
-		Ê§°Ü -1
-		*/
-		int open_ts() 
-		{
-			ts_fd = open("/dev/input/event0",O_RDWR);
-			if(ts_fd == -1)
-			{
-				cout << "open ts failed" << endl;
-				return -1;
-			}
-			return 0;
-		}
-		
-		/*
-		//¶ÁÈ¡´¥ÃşÆÁĞÅÏ¢,½«×îºóµã»÷µÄÎ»ÖÃ´«¸ø³ÉÔ±±äÁ¿
-		
-		*/
-		void read_ts() 
-		{	
-			struct input_event ev;
-			int x_flag = 0;  	//x·½Ïò×ø±êÆğµã×ø±ê ±êÖ¾Î»
-			int y_flag = 0; 	//y·½Ïò×ø±êÆğµã×ø±ê ±êÖ¾Î»
-			
-			
-			while(1)		//Ò»´Î»¬¶¯¶¯×÷
-			{
-				int r = read(ts_fd, &ev, sizeof(ev));
-				if(r != sizeof(ev))
-				{
-					cout << "read failed" << endl;
-					continue;
-				}
-				//·ÖÎöĞÅÏ¢
-				cout << "type = " << ev.type << "code = " << ev.code << "value = " << ev.value << endl;
-				if(ev.type == EV_KEY && ev.code == BTN_TOUCH) //´¥ÃşÆÁ°´¼üÊÂ¼ş-¡·µã»÷
-				{
-					if(ev.value == 1) //°´ÏÂÈ¥ÁË
-					{
-						cout << "down" << endl;
-					}
-					else //ev.value == 0 µ¯ÆğÀ´ÁË
-					{
-						cout << "up" << endl;
-						break;
-					}
-				}
-				if(ev.type == EV_ABS && ev.code == ABS_X)  //´¥ÃşÆÁx·½ÏòµÄÊÂ¼ş
-				{	
-					if(x_flag == 0) //xµÄÆğµã×ø±ê
-					{
-						x_flag = 1;
-						b_x = ev.value;
-					}
-					s_x = ev.value;		
-				}
-				if(ev.type == EV_ABS && ev.code == ABS_Y)  //´¥ÃşÆÁy·½ÏòµÄÊÂ¼ş
-				{
-					if(y_flag == 0) //yµÄÆğµã×ø±ê
-					{
-						y_flag = 1;
-						b_y = ev.value;
-					}
-					s_y = ev.value;
-				}
-			}
-				
-			if(abs(s_x - b_x) - abs(s_y - b_y) > 0 && abs(s_x - b_x) > 20) //x·½ÏòµÄ»¬¶¯
-			{
-				if(s_x  - b_x > 0)  //ÓÒ»¬
-				{
-					cout << "right slide" << endl;
-				}
-				else //s_x - b_x < 0		//×ó»¬
-				{
-					cout << "left slide" << endl;
-				}
-			}
-			if(abs(s_x - b_x) - abs(s_y - b_y) <= 0 && abs(s_y - b_y) > 20)	//y·½ÏòµÄ»¬¶¯
-			{
-				if(s_y - b_y > 0)  //ÏÂ»¬
-				{
-					cout << "down slide" << endl;
-				}
-				else		//ÉÏ»¬ 
-				{
-					cout << "up slide" << endl;
-				}
-			}
-			
-			
-		}
-		
-		
-		
-	/* 
-	¶ÁÈ¡´¥ÃşÆÁÊäÈë²¢¿ØÖÆÉßµÄ·½Ïò£¨·µ»Ø·½ÏòÖµ£º0-ÉÏ£¬1-ÏÂ£¬2-×ó£¬3-ÓÒ£© 
-	*/
-    int get_direction() 
-	{
-        read_ts(); // µ÷ÓÃÔ­ÓĞ¶ÁÈ¡Âß¼­
-        int dx = s_x - b_x;
-        int dy = s_y - b_y;
-
-        if (abs(dx) > abs(dy) && abs(dx) > 20) { // x·½Ïò»¬¶¯
-            return (dx > 0) ? 3 : 2; // ÓÒ»¬=3£¬×ó»¬=2
-        } else if (abs(dy) > 20) { // y·½Ïò»¬¶¯
-            return (dy > 0) ? 1 : 0; // ÏÂ»¬=1£¬ÉÏ»¬=0
-        }
-        return -1; // ÎŞĞ§»¬¶¯
-    }
-	
-	
+struct Snake {
+	Pos snake[H * W];
+	int snakeDir;        // è›‡çš„è¿åŠ¨æ–¹å‘
+	int snakeLength;     // è›‡çš„é•¿åº¦
+	int lastMoveTime;
+	int moveFrequency;
 };
 
-int main() // Ö÷º¯Êı   --Òü¼ÑÎ¢
-{
-	
-	// ³õÊ¼»¯Ëæ»úÊıÖÖ×Ó
-    srand(time(0));
-	
-	// ³õÊ¼»¯ÆÁÄ»¡¢ÉßºÍÊ³Îï
-    Lcd lcd(800, 480);
-    snake my_snake;
-    food my_food(0xFF00FF00);  // ³õÊ¼Ê³ÎïÑÕÉ«
-	my_food.random_position(800, 480);
-	
-	//Çå³ıÒ»ÏÂÖ®Ç°µÄ
-	lcd.clear_display();
-	
-	// **ĞÂÔö**£º½öÔÚÓÎÏ·¿ªÊ¼Ê±»æÖÆÒ»´ÎÇ½±Ú
-    lcd.draw_wall();
-	
-	
-	// ³õÊ¼»¯´¥ÃşÆÁ
-    touch_display ts;
-    if (ts.open_ts() != 0) {
-        cout << "´¥ÃşÆÁ³õÊ¼»¯Ê§°Ü£¡" << endl;
-        return -1;
-    }
-	
-	
-	// Ô­×Ó±êÖ¾Î»£º¿ØÖÆÏß³ÌÔËĞĞ
-    std::atomic<bool> threadRunning(true);
-    // ´æ´¢×îĞÂ·½ÏòµÄÔ­×Ó±äÁ¿
-    std::atomic<int> currentDirection(-1);// -1±íÊ¾ÎŞÊäÈë£¬Ê¹ÓÃÉßµÄorientation×÷Îªµ±Ç°·½Ïò
-
-    // ÊäÈëÏß³Ì£º½ö¸üĞÂ·½Ïò£¬²»Ö±½ÓÒÆ¶¯Éß
-    std::thread inputThread([&]() {
-        while (threadRunning) {
-            int dir = ts.get_direction();
-            if (dir != -1) {
-                // ¼ì²é·½ÏòÊÇ·ñºÏ·¨£¨²»ÄÜÓëµ±Ç°·½ÏòÏà·´£©
-                if ((dir == 0 && my_snake.orientation != 1) ||
-                    (dir == 1 && my_snake.orientation != 0) ||
-                    (dir == 2 && my_snake.orientation != 3) ||
-                    (dir == 3 && my_snake.orientation != 2)) {
-                    my_snake.orientation = dir; // Ö±½Ó¸üĞÂÉßµÄ³¯Ïò
-                }
-            }
-        }
-    });
-	
-	
-	
-	// ÓÎÏ·Ö÷Ñ­»·
-    bool game_running = true;
-	
-	
-	 while (game_running) 
-	{
-        // 1. ÇåÆÁ
-        //lcd.clear_display();
-		
-		//¾Ö²¿ÇåÆÁ
-        lcd.clear_objects(my_snake, my_food);
-		
-        // ×Ô¶¯ÒÆ¶¯Éß£¨ºËĞÄÂß¼­£©
-        my_snake.auto_move();
-
-
-        // 3. ¼ì²â³ÔÊ³Îï
-        if (my_snake.check_eat_food(my_food)) {
-            my_snake.grow();
-            my_food.random_position(800, 480);  // Éú³ÉĞÂÊ³ÎïÎ»ÖÃ
-        }
-
-        // 4. ¼ì²âÓÎÏ·½áÊø
-        if (my_snake.game_over()) 
-		{
-            cout << "ÓÎÏ·½áÊø£¡µÃ·Ö£º" << my_snake.body_cnt - 3 << endl;
-            game_running = false;
-        }
-
-        // 5. äÖÈ¾»­Ãæ
-        lcd.show_snake(my_snake);
-        lcd.show_food(my_food);
-
-        // 6. ¿ØÖÆÖ¡ÂÊ
-        //usleep(100000);  // 100ms£¬Ô¼10FPS
-		//usleep(5000);
-		 // ¿ØÖÆ×Ô¶¯ÒÆ¶¯ËÙ¶È£¨100msÒÆ¶¯Ò»´Î£©
-        //usleep(16666);
-		usleep(100000);
-    }
-	
-	
-	// ÓÅÑÅ½áÊøÏß³Ì
-    threadRunning = false;
-    if (inputThread.joinable()) {
-        inputThread.join(); // µÈ´ıÏß³Ì½áÊø
-    }
-
-	
-	
-	
-	return 0;
+void initSnake(Snake* snk) { // åˆå§‹åŒ–è›‡
+	snk->snakeLength = 3;    // è›‡åˆšå¼€å§‹çš„é•¿åº¦ä¸º3
+	snk->snakeDir = 2;       // åˆšå¼€å§‹è›‡çš„æ–¹å‘
+	Pos p1 = {W / 2, H / 2};
+	Pos p2 = {W / 2 - 1, H / 2};
+	Pos p3 = {W / 2 - 2, H / 2};
+	snk->snake[0] = p1; // è›‡åˆå§‹ä½ç½®åœ¨åœ°å›¾ä¸­é—´
+	snk->snake[1] = p2;
+	snk->snake[2] = p3;
+	snk->lastMoveTime = 0;   // ä¸Šæ¬¡ç§»åŠ¨çš„æ—¶é—´
+	snk->moveFrequency = 10; // ç§»åŠ¨é—´éš”æ—¶é—´æ”¹ä¸º10ms
 }
 
+void initMap(Map* map) { // åˆå§‹åŒ–åœ°å›¾
+	for (int y = 0; y < H; y++) {
+		for (int x = 0; x < W; x++) {
+			map->data[y][x] = EMPTY; // åœ°å›¾é‡Œæ¯ä¸ªæ ¼å­éƒ½ä¸ºç©ºï¼Œä¹Ÿå°±æ˜¯æ²¡æœ‰ä¸€æ¡è›‡å’Œé£Ÿç‰©ä¸º0
+		}
+	}
+	map->hasFood = false; // åœ°å›¾æ²¡æœ‰é£Ÿç‰©
+}
 
-//arm-linux-g++ -std=c++11 main.cpp -o main -lpthread
+void drawUnit(Pos p, const char* unit) { // ç”»å•å…ƒçš„ç›®çš„å°±æ˜¯åœ¨ç‰¹å®šä½ç½®æ‰“å°å­—ç¬¦ä¸²
+	move(p.y + 1, p.x + 1);
+	printw("%s", unit);
+}
+
+void drawMap(Map* map) { // ç”»åœ°å›¾
+	clear(); // æ¸…ç©ºæ§åˆ¶å°
+	for (int i = 0; i < W + 2; i++) {
+		mvaddch(0, i, '#');
+	}
+	for (int y = 0; y < H; y++) {
+		mvaddch(y + 1, 0, '#');
+		for (int x = 0; x < W; x++) {
+			if (map->data[y][x] == EMPTY) {
+				mvaddch(y + 1, x + 1, ' ');
+			}
+		}
+		mvaddch(y + 1, W + 1, '#');
+	}
+	for (int i = 0; i < W + 2; i++) {
+		mvaddch(H + 1, i, '#');
+	}
+	refresh();
+}
+
+void drawSnake(Snake* snk) { // ç”»è›‡
+	for (int i = 0; i < snk->snakeLength; i++) {
+		if (i == 0) {
+			drawUnit(snk->snake[i], "O"); // è›‡å¤´ç”¨åœ†å½¢è¡¨ç¤º
+		} else {
+			drawUnit(snk->snake[i], "o"); // è›‡èº«ç”¨å°åœ†å½¢è¡¨ç¤º
+		}
+	}
+}
+
+bool checkOutBound(Pos p) { // åˆ¤æ–­æ˜¯å¦è¶…å‡ºè¾¹ç•Œï¼Œè¶…å‡ºè¿”å›trueï¼Œå¦åˆ™è¿”å›false
+	return (p.x < 0 || p.x >= W || p.y < 0 || p.y >= H);
+}
+
+void checkEatFood(Snake* snk, Pos tail, Map* map) { // åˆ¤æ–­è›‡å¤´æœ‰æ²¡æœ‰ç¢°æ’åˆ°é£Ÿç‰©ï¼Œç¢°æ’åˆ°è›‡å°±å˜é•¿
+	Pos head = snk->snake[0]; // è›‡å¤´
+	if (map->data[head.y][head.x] == FOOD) {
+		snk->snake[snk->snakeLength++] = tail; // è›‡å˜é•¿ï¼ŒæŠŠåŸæ¥çš„å°¾å·´ä½ç½®
+		map->data[head.y][head.x] = EMPTY; // é£Ÿç‰©ä½ç½®å˜ä¸ºç©º
+		map->hasFood = false; // åœ°å›¾æ²¡æœ‰é£Ÿç‰©äº†
+		drawUnit(tail, "O"); // ç”»å°¾å·´
+	}
+}
+
+void moveSnake(Snake* snk) {
+	for (int i = snk->snakeLength - 1; i >= 1; i--) {
+		snk->snake[i] = snk->snake[i - 1]; // è´ªåƒè›‡çš„åç§»
+	}    // å› ä¸ºè›‡æ˜¯å‘å‰èµ°çš„ï¼Œæ¯ä¸ªèŠ‚ç‚¹ä½ç½®å¿…é¡»æ˜¯å‰ä¸€ä¸ªèŠ‚ç‚¹çš„ä½ç½®
+	snk->snake[0].y += dir[snk->snakeDir][0]; // æ”¹å˜è›‡å¤´çš„ä½ç½®
+	snk->snake[0].x += dir[snk->snakeDir][1];
+}
+
+bool doMove(Snake* snk, Map* map) { // è›‡çš„ç§»åŠ¨
+	Pos tail = snk->snake[snk->snakeLength - 1]; // å¾—åˆ°è›‡çš„å°¾éƒ¨
+	drawUnit(tail, " "); // å› ä¸ºè›‡å‘å‰èµ°ï¼Œæ‰€ä»¥è›‡å°¾åŸæ¥çš„ä½ç½®å°±ä¸ºç©º
+	moveSnake(snk);
+	if (checkOutBound(snk->snake[0])) { // å¦‚æœç§»åŠ¨ä»¥ååˆ¤æ–­æ˜¯å¦è¶…å‡ºè¾¹ç•Œï¼Œè¶…å‡ºå°±åœæ­¢è¿åŠ¨
+		return false;
+	}
+	checkEatFood(snk, tail, map);
+	drawUnit(snk->snake[0], "O"); // è›‡å‘å‰èµ°ï¼Œè›‡å¤´å‰ä¸€ä¸ªä½ç½®è¦ç”»ä¸€ä¸ªåœ†
+	return true; // å¦‚æœç§»åŠ¨è¶…å‡ºè¾¹ç•Œæ—¶è¿”å›falseï¼Œä¹Ÿå°±æ˜¯ç§»åŠ¨å¤±è´¥
+}
+
+bool checkSnakeMove(Snake* snk, Map* map) {
+	int curTime = clock();
+	if (curTime - snk->lastMoveTime > snk->moveFrequency) { // æ—¶é—´é—´éš”
+		if (!doMove(snk, map)) return false;
+		snk->lastMoveTime = curTime;
+	}
+	return true; // å¦‚æœç§»åŠ¨æˆåŠŸè¿”å›trueï¼Œæ²¡æœ‰ç§»åŠ¨è¿”å›false
+}
+
+void checkChangeDir(Snake* snk) { // æ£€æµ‹æ”¹å˜è›‡æ–¹å‘
+	int ch = getch();
+	if (ch != ERR) {
+		switch (ch) {
+			case 'w': // wä¸Š
+				if (snk->snakeDir != 1) snk->snakeDir = 0; // å¦‚æœä¸ºä¸Šæ–¹å‘ï¼Œå†æŒ‰ä¸Šé”®å°±ä¸é€š
+				break;
+			case 'd': // då³
+				if (snk->snakeDir != 2) snk->snakeDir = 3;
+				break;
+			case 's': // sä¸‹
+				if (snk->snakeDir != 0) snk->snakeDir = 1;
+				break;
+			case 'a': // aå·¦
+				if (snk->snakeDir != 3) snk->snakeDir = 2;
+				break;
+			default:
+				break;
+		}
+	}
+}
+
+void checkFoodGenerate(Snake* snk, Map* map) { // ç”Ÿæˆé£Ÿç‰©
+	if (!map->hasFood) {
+		while (1) {
+			int x = rand() % W; // éšæœºç”Ÿæˆé£Ÿç‰©çš„xå’Œyåæ ‡
+			int y = rand() % H;
+			int i = 0;
+			while (i < snk->snakeLength) { // é£Ÿç‰©ä½ç½®ä¸èƒ½åœ¨è›‡èº«ä¸Š
+				if (x == snk->snake[i].x && y == snk->snake[i].y) { // åˆ¤æ–­é£Ÿç‰©ä½ç½®æ˜¯å¦åœ¨è›‡èº«ä¸Š
+					break;
+				}
+				i++;
+			}
+			if (i == snk->snakeLength) {
+				map->data[y][x] = FOOD;
+				map->hasFood = true;
+				Pos foodPos = {x, y};
+				drawUnit(foodPos, "*"); // é£Ÿç‰©ç”¨"*"è¡¨ç¤º
+				return;
+			}
+		}
+	}
+}
+
+void initGame(Snake* snk, Map* map) { // æ¸¸æˆè®¾ç½®çš„å‡½æ•°
+	initscr(); // åˆå§‹åŒ–ncurses
+	cbreak(); // ç¦ç”¨è¡Œç¼“å†²
+	noecho(); // ä¸æ˜¾ç¤ºè¾“å…¥çš„å­—ç¬¦
+	curs_set(0); // éšè—å…‰æ ‡
+	keypad(stdscr, TRUE); // å¯ç”¨åŠŸèƒ½é”®
+	timeout(0); // éé˜»å¡è¾“å…¥
+	initMap(map); // åˆå§‹åŒ–åœ°å›¾
+	initSnake(snk); // åˆå§‹åŒ–è›‡
+	drawMap(map); // ç”»åœ°å›¾
+	drawSnake(snk); // ç”»è›‡
+}
+
+int main() {
+	srand(time(0));
+	Map map;
+	Snake snk;
+	initGame(&snk, &map);
+	while (1) { // æ¸¸æˆå¾ªç¯
+		checkChangeDir(&snk);
+		if (!checkSnakeMove(&snk, &map)) {
+			break; // å¦‚æœè›‡ç§»åŠ¨å¤±è´¥ï¼Œç»ˆæ­¢æ¸¸æˆ
+		}
+		checkFoodGenerate(&snk, &map);
+		usleep(100000); // æ§åˆ¶æ¸¸æˆé€Ÿåº¦ï¼Œæ”¹ä¸º100å¾®ç§’ï¼ˆ0.1æ¯«ç§’ï¼‰
+	}
+	mvprintw(H/2, W/2 - 4, "Game Over"); // ç»“æŸæ—¶åœ¨ä¸­é—´æ˜¾ç¤º"Game Over"
+	refresh();
+	getch(); // ç­‰å¾…ç”¨æˆ·æŒ‰é”®
+	endwin(); // ç»“æŸncurses
+	return 0;
+}
